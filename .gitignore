@@ -22,3 +22,7 @@ wheels/
 .vscode/
 venv/
 env/
+.venv/
+run/
+reference.wav
+clone*.wav
