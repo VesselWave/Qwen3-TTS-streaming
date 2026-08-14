@@ -1,17 +1,53 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import {
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  unwatchFile,
+  watchFile,
+  writeFileSync,
+} from "node:fs";
+import { homedir } from "node:os";
 import { createConnection } from "node:net";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const extensionDir = dirname(realpathSync(fileURLToPath(import.meta.url)));
+const defaultSocketPath = join(extensionDir, "..", "run", "clone.sock");
+const stateDir = join(homedir(), ".pi", "agent");
+const statePath = join(stateDir, "speak-stream.enabled");
+
+function readEnabled(): boolean {
+  try {
+    return readFileSync(statePath, "utf8").trim() !== "false";
+  } catch {
+    return true;
+  }
+}
+
+function writeEnabled(enabled: boolean): void {
+  mkdirSync(stateDir, { recursive: true });
+  writeFileSync(statePath, String(enabled));
+}
 
 /** Speaks only the final assistant answer after an agent run settles. */
 export default function speakFinal(pi: ExtensionAPI) {
-  let enabled = true;
+  let enabled = readEnabled();
   let finalText = "";
   let queue: string[] = [];
   let speaking = false;
   let socketPath = "";
   let interactive = false;
+  let reportError = (_message: string) => {};
+  let setStatus = (_enabled: boolean) => {};
 
   const maxChunkChars = 280;
+
+  function syncEnabled(): void {
+    enabled = readEnabled();
+    if (!enabled) queue = [];
+    setStatus(enabled);
+  }
 
   function clean(text: string): string {
     return text
@@ -81,8 +117,10 @@ export default function speakFinal(pi: ExtensionAPI) {
       while (enabled && queue.length > 0) {
         try {
           await send(queue.shift()!);
-        } catch {
+        } catch (error) {
           queue = [];
+          const message = error instanceof Error ? error.message : String(error);
+          reportError(`Speech failed: ${message}`);
           break;
         }
       }
@@ -92,9 +130,14 @@ export default function speakFinal(pi: ExtensionAPI) {
   }
 
   pi.on("session_start", (_event, ctx) => {
-    socketPath = process.env.PI_SPEAK_SOCKET ?? join(ctx.cwd, "run", "clone.sock");
+    socketPath = process.env.PI_SPEAK_SOCKET || defaultSocketPath;
     interactive = ctx.mode === "tui";
-    if (interactive) ctx.ui.setStatus("speak-final", enabled ? "🔊 final answer" : undefined);
+    reportError = (message) => ctx.ui.notify(message, "error");
+    setStatus = (value) => {
+      if (interactive) ctx.ui.setStatus("speak-final", value ? "🔊 final answer" : undefined);
+    };
+    syncEnabled();
+    watchFile(statePath, { interval: 250 }, syncEnabled);
   });
 
   pi.on("agent_start", () => {
@@ -119,17 +162,19 @@ export default function speakFinal(pi: ExtensionAPI) {
   });
 
   pi.on("session_shutdown", () => {
+    unwatchFile(statePath, syncEnabled);
     enabled = false;
     queue = [];
+    reportError = () => {};
+    setStatus = () => {};
   });
 
   pi.registerCommand("speak-stream", {
     description: "Toggle speech for final assistant answers",
     handler: async (_args, ctx) => {
-      enabled = !enabled;
-      if (!enabled) queue = [];
-      ctx.ui.setStatus("speak-final", enabled ? "🔊 final answer" : undefined);
-      ctx.ui.notify(`Final-answer speech ${enabled ? "on" : "off"}`, "info");
+      writeEnabled(!enabled);
+      syncEnabled();
+      ctx.ui.notify(`Final-answer speech ${enabled ? "on" : "off"} globally`, "info");
     },
   });
 }
