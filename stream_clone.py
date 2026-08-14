@@ -127,7 +127,7 @@ def main() -> None:
             voice_clone_prompt=prompt,
             emit_every_frames=12,
             decode_window_frames=80,
-            overlap_samples=512,
+            overlap_samples=1024,
             first_chunk_emit_every=5,
             first_chunk_decode_window=48,
             first_chunk_frames=48,

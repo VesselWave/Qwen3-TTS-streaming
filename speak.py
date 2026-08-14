@@ -28,13 +28,19 @@ def speak_plain(text: str, socket_path: Path) -> None:
 
 
 def speak_pi_json(lines: Iterable[str], socket_path: Path) -> None:
-    """Speak short phrases from Pi text deltas for smooth, low-latency audio."""
+    """Speak complete clauses from Pi text deltas for smooth, natural audio."""
     pending = ""
     phrase: list[str] = []
 
     def add_word(word: str) -> None:
         phrase.append(word)
-        if len(phrase) >= 8 or word.endswith((".", "!", "?", ";", ":", ",")):
+        sentence_end = word.endswith((".", "!", "?"))
+        clause_end = word.endswith((";", ":", ","))
+        if (
+            len(phrase) >= 24
+            or (sentence_end and len(phrase) >= 6)
+            or (clause_end and len(phrase) >= 12)
+        ):
             send(" ".join(phrase), socket_path)
             phrase.clear()
     for line in lines:
