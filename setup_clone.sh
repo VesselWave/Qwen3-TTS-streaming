@@ -18,8 +18,9 @@ uv venv --python 3.11 .venv
 uv pip install --python .venv/bin/python \
   torch torchaudio --index-url https://download.pytorch.org/whl/cu128
 uv pip install --python .venv/bin/python -e . "transformers==4.57.3"
-mkdir -p "$HOME/.local/bin"
+mkdir -p "$HOME/.local/bin" "$HOME/.pi/agent/extensions"
 ln -sfn "$PWD/speak.py" "$HOME/.local/bin/speak"
+ln -sfn "$PWD/extensions/speak-stream.ts" "$HOME/.pi/agent/extensions/speak-stream.ts"
 
 echo
 echo "Ready. First run downloads model weights:"
