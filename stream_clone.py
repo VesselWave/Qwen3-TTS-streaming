@@ -106,9 +106,12 @@ def main() -> None:
         model.enable_streaming_optimizations(
             decode_window_frames=80,
             use_compile=True,
+            # reduce-overhead already uses CUDA graphs internally; manual capture adds nothing.
             use_cuda_graphs=False,
             compile_mode="reduce-overhead",
-            compile_codebook_predictor=False,
+            # Useful on main; unlike use_fast_codebook, not marked slower/broken.
+            compile_codebook_predictor=True,
+            use_fast_codebook=False,
         )
 
     sink = AudioSink(play=not args.no_play)
